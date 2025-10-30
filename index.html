@@ -6,6 +6,7 @@
     <title>Messagerie Instantanée</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <style>
         * {
             margin: 0;
@@ -420,6 +421,19 @@
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
+        // OneSignal Configuration
+        let OneSignal = null;
+        window.OneSignalDeferred = window.OneSignalDeferred || [];
+        
+        OneSignalDeferred.push(async function(OneSignalInstance) {
+            OneSignal = OneSignalInstance;
+            await OneSignal.init({
+                appId: "4c3756ba-312a-44e0-b39f-9f11529d0933",
+                allowLocalhostAsSecureOrigin: true,
+            });
+            console.log('OneSignal initialized');
+        });
+
         // Global variables
         let currentUser = null;
         let selectedChatUser = null;
@@ -427,6 +441,7 @@
         let allUsers = [];
         let notificationsEnabled = false;
         let notificationPermission = 'default';
+        let oneSignalInitialized = false;
 
         // DOM Elements
         const authScreen = document.getElementById('authScreen');
@@ -583,6 +598,16 @@
             currentUserDisplay.textContent = `Connecté en tant que ${currentUser.username}`;
             updateNotificationButton();
             loadUsers();
+            
+            // Login to OneSignal with user ID
+            if (OneSignal) {
+                OneSignal.login(currentUser.id).then(() => {
+                    console.log('OneSignal user logged in:', currentUser.id);
+                    oneSignalInitialized = true;
+                }).catch(err => {
+                    console.error('OneSignal login error:', err);
+                });
+            }
         }
 
         // Update notification button UI
@@ -608,32 +633,50 @@
                 notificationsEnabled = false;
                 localStorage.setItem('notificationsEnabled', 'false');
                 updateNotificationButton();
+                
+                // Unsubscribe from OneSignal
+                if (OneSignal) {
+                    try {
+                        await OneSignal.User.PushSubscription.optOut();
+                        console.log('OneSignal notifications disabled');
+                    } catch (err) {
+                        console.error('Error disabling OneSignal:', err);
+                    }
+                }
             } else {
-                // Request permission
-                if (Notification.permission === 'granted') {
-                    notificationsEnabled = true;
-                    localStorage.setItem('notificationsEnabled', 'true');
-                    updateNotificationButton();
-                    
-                    // Show test notification
-                    new Notification('Notifications activées', {
-                        body: 'Vous recevrez maintenant des notifications pour les nouveaux messages',
-                        icon: '📱'
-                    });
-                } else if (Notification.permission === 'default') {
+                // Request permission for browser notifications
+                if (Notification.permission === 'default') {
                     const permission = await Notification.requestPermission();
-                    if (permission === 'granted') {
+                    if (permission !== 'granted') {
+                        alert('Les notifications ont été refusées');
+                        return;
+                    }
+                } else if (Notification.permission === 'denied') {
+                    alert('Les notifications ont été bloquées. Veuillez les autoriser dans les paramètres de votre navigateur.');
+                    return;
+                }
+                
+                // Enable OneSignal push notifications
+                if (OneSignal) {
+                    try {
+                        await OneSignal.User.PushSubscription.optIn();
                         notificationsEnabled = true;
                         localStorage.setItem('notificationsEnabled', 'true');
                         updateNotificationButton();
                         
-                        new Notification('Notifications activées', {
+                        console.log('OneSignal notifications enabled');
+                        
+                        // Show test notification
+                        new Notification('Notifications activées! 🔔', {
                             body: 'Vous recevrez maintenant des notifications pour les nouveaux messages',
-                            icon: '📱'
+                            icon: '💬'
                         });
+                    } catch (err) {
+                        console.error('Error enabling OneSignal:', err);
+                        alert('Erreur lors de l\'activation des notifications: ' + err.message);
                     }
                 } else {
-                    alert('Les notifications ont été bloquées. Veuillez les autoriser dans les paramètres de votre navigateur.');
+                    alert('OneSignal n\'est pas encore initialisé. Veuillez patienter...');
                 }
             }
         });
@@ -647,9 +690,19 @@
             database.ref('chats').off();
             database.ref('users').off();
             
+            // Logout from OneSignal
+            if (OneSignal && oneSignalInitialized) {
+                OneSignal.logout().then(() => {
+                    console.log('OneSignal user logged out');
+                }).catch(err => {
+                    console.error('OneSignal logout error:', err);
+                });
+            }
+            
             sessionStorage.removeItem('currentUser');
             currentUser = null;
             selectedChatUser = null;
+            oneSignalInitialized = false;
             authScreen.style.display = 'block';
             chatScreen.style.display = 'none';
             document.getElementById('authForm').reset();
@@ -907,6 +960,29 @@
                 // Push message to Firebase
                 const messageRef = await database.ref('chats/' + chatId).push(messageData);
                 console.log('Message sent successfully with ID:', messageRef.key);
+                
+                // Send OneSignal push notification
+                if (OneSignal && oneSignalInitialized) {
+                    try {
+                        // Send notification to receiver via OneSignal REST API
+                        const notificationData = {
+                            app_id: "4c3756ba-312a-44e0-b39f-9f11529d0933",
+                            include_aliases: {
+                                external_id: [selectedChatUser.id]
+                            },
+                            target_channel: "push",
+                            headings: { en: `Nouveau message de ${currentUser.username}` },
+                            contents: { en: text.substring(0, 100) }
+                        };
+                        
+                        console.log('Sending OneSignal notification:', notificationData);
+                        
+                        // Note: You need to implement server-side API call for production
+                        // This is just for demonstration
+                    } catch (err) {
+                        console.error('OneSignal notification error:', err);
+                    }
+                }
                 
                 // Clear input
                 messageInput.value = '';
