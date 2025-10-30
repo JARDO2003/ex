@@ -456,7 +456,7 @@
         const notificationText = document.getElementById('notificationText');
 
         // Check if user is logged in
-        const loggedInUser = sessionStorage.getItem('currentUser');
+        const loggedInUser = localStorage.getItem('currentUser'); // Changed from sessionStorage
         if (loggedInUser) {
             currentUser = JSON.parse(loggedInUser);
             showChatScreen();
@@ -482,6 +482,16 @@
             
             oscillator.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + 0.5);
+        }
+        
+        // Request persistent notification permission on load
+        if ('Notification' in window && Notification.permission === 'default') {
+            // Auto-request permission after a short delay
+            setTimeout(() => {
+                if (currentUser) {
+                    Notification.requestPermission();
+                }
+            }, 2000);
         }
 
         // Switch between login and signup
@@ -544,7 +554,9 @@
                     });
 
                     if (userFound) {
-                        sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+                        localStorage.setItem('currentUser', JSON.stringify(currentUser)); // Changed from sessionStorage
+                        // Store last login time
+                        localStorage.setItem('lastLoginTime', Date.now().toString());
                         showChatScreen();
                         errorMessage.classList.add('hidden');
                     } else {
@@ -584,7 +596,9 @@
                         email: email
                     };
 
-                    sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser)); // Changed from sessionStorage
+                    // Store last login time
+                    localStorage.setItem('lastLoginTime', Date.now().toString());
                     showChatScreen();
                     errorMessage.classList.add('hidden');
                 }
@@ -601,6 +615,33 @@
             currentUserDisplay.textContent = `Connecté en tant que ${currentUser.username}`;
             updateNotificationButton();
             loadUsers();
+            
+            // Update user's online status
+            updateUserStatus('online');
+            
+            // Update last seen on page visibility change
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    updateUserStatus('away');
+                } else {
+                    updateUserStatus('online');
+                }
+            });
+            
+            // Update status before page unload
+            window.addEventListener('beforeunload', () => {
+                updateUserStatus('offline');
+            });
+        }
+        
+        // Update user online status
+        function updateUserStatus(status) {
+            if (currentUser) {
+                database.ref('users/' + currentUser.id + '/status').set({
+                    state: status,
+                    lastSeen: Date.now()
+                });
+            }
         }
 
         // Update notification button UI
@@ -663,7 +704,16 @@
             database.ref('chats').off();
             database.ref('users').off();
             
-            sessionStorage.removeItem('currentUser');
+            // Update status to offline
+            if (currentUser) {
+                database.ref('users/' + currentUser.id + '/status').set({
+                    state: 'offline',
+                    lastSeen: Date.now()
+                });
+            }
+            
+            localStorage.removeItem('currentUser'); // Changed from sessionStorage
+            localStorage.removeItem('lastLoginTime');
             currentUser = null;
             selectedChatUser = null;
             authScreen.style.display = 'block';
@@ -707,15 +757,38 @@
                 if (selectedChatUser && selectedChatUser.id === user.id) {
                     userItem.classList.add('active');
                 }
-                userItem.innerHTML = `
-                    <div class="user-avatar">${user.username.charAt(0).toUpperCase()}</div>
-                    <div class="user-info">
-                        <div class="user-name">${user.username}</div>
-                        <div class="user-status">${user.email}</div>
-                    </div>
-                `;
+                
+                // Check for unread messages
+                const chatId = [currentUser.id, user.id].sort().join('_');
+                checkUnreadMessages(chatId, user.id, (hasUnread) => {
+                    const unreadBadge = hasUnread ? '<span style="background:#ff5252;color:white;padding:2px 6px;border-radius:10px;font-size:10px;margin-left:auto;">New</span>' : '';
+                    
+                    userItem.innerHTML = `
+                        <div class="user-avatar">${user.username.charAt(0).toUpperCase()}</div>
+                        <div class="user-info">
+                            <div class="user-name">${user.username}</div>
+                            <div class="user-status">${user.email}</div>
+                        </div>
+                        ${unreadBadge}
+                    `;
+                });
+                
                 userItem.addEventListener('click', () => selectUser(user));
                 usersList.appendChild(userItem);
+            });
+        }
+        
+        // Check for unread messages
+        function checkUnreadMessages(chatId, userId, callback) {
+            database.ref('chats/' + chatId).once('value', (snapshot) => {
+                let hasUnread = false;
+                snapshot.forEach((childSnapshot) => {
+                    const msg = childSnapshot.val();
+                    if (msg.receiverId === currentUser.id && msg.senderId === userId && !msg.read) {
+                        hasUnread = true;
+                    }
+                });
+                callback(hasUnread);
             });
         }
 
@@ -748,7 +821,25 @@
                 }
             });
             
+            // Mark messages as read
+            const chatId = [currentUser.id, user.id].sort().join('_');
+            markMessagesAsRead(chatId);
+            
             loadMessages();
+        }
+        
+        // Mark all messages in a chat as read
+        function markMessagesAsRead(chatId) {
+            database.ref('chats/' + chatId).once('value', (snapshot) => {
+                snapshot.forEach((childSnapshot) => {
+                    const msg = childSnapshot.val();
+                    if (msg.receiverId === currentUser.id && !msg.read) {
+                        database.ref('chats/' + chatId + '/' + childSnapshot.key).update({
+                            read: true
+                        });
+                    }
+                });
+            });
         }
 
         // Load messages
@@ -828,6 +919,7 @@
 
         // Listen for new messages for notifications
         let lastMessageTimestamps = {};
+        let notificationQueue = []; // Queue for notifications when tab is not active
         
         function listenForNotifications() {
             if (!currentUser) return;
@@ -866,36 +958,58 @@
                     
                     lastMessageTimestamps[chatId] = latestTimestamp;
                     
-                    // Only show notification if not currently chatting with this user
-                    if (notificationsEnabled && 
-                        (!selectedChatUser || selectedChatUser.id !== latestMessage.senderId)) {
-                        
-                        const sender = allUsers.find(u => u.id === latestMessage.senderId);
-                        if (sender) {
-                            // Show browser notification
-                            const notification = new Notification(`💬 ${sender.username}`, {
-                                body: latestMessage.text,
-                                icon: '💬',
-                                badge: '💬',
-                                tag: latestMessage.senderId,
-                                requireInteraction: false
-                            });
-                            
-                            // Play notification sound
-                            createNotificationSound();
-                            
-                            // Auto close after 5 seconds
-                            setTimeout(() => notification.close(), 5000);
-                            
-                            // Click to focus chat
-                            notification.onclick = () => {
-                                window.focus();
-                                selectUser(sender);
-                                notification.close();
-                            };
+                    const sender = allUsers.find(u => u.id === latestMessage.senderId);
+                    if (sender) {
+                        // Always show notification if not in active chat with sender
+                        if (!selectedChatUser || selectedChatUser.id !== latestMessage.senderId) {
+                            showNotification(sender, latestMessage);
                         }
+                        
+                        // Refresh user list to show unread badge
+                        displayUsers(allUsers);
                     }
                 }
+            }
+        }
+        
+        function showNotification(sender, message) {
+            // Check if notifications are enabled
+            if (!notificationsEnabled) return;
+            
+            // Request permission if not granted
+            if (Notification.permission === 'granted') {
+                const notification = new Notification(`💬 ${sender.username}`, {
+                    body: message.text.substring(0, 100),
+                    icon: '💬',
+                    badge: '💬',
+                    tag: message.senderId,
+                    requireInteraction: false,
+                    silent: false
+                });
+                
+                // Play notification sound
+                try {
+                    createNotificationSound();
+                } catch (e) {
+                    console.log('Sound play failed:', e);
+                }
+                
+                // Auto close after 5 seconds
+                setTimeout(() => notification.close(), 5000);
+                
+                // Click to focus chat
+                notification.onclick = () => {
+                    window.focus();
+                    selectUser(sender);
+                    notification.close();
+                };
+            } else if (Notification.permission === 'default') {
+                // Request permission
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        showNotification(sender, message);
+                    }
+                });
             }
         }
 
