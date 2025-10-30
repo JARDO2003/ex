@@ -169,6 +169,11 @@
             background: #4CAF50;
         }
 
+        /* Hide emoji 404 errors */
+        img[src*="%F0%9F"] {
+            display: none !important;
+        }
+
         .search-box {
             padding: 15px;
             border-bottom: 1px solid #e0e0e0;
@@ -658,19 +663,9 @@
             database.ref('chats').off();
             database.ref('users').off();
             
-            // Logout from OneSignal
-            if (OneSignal && oneSignalInitialized) {
-                OneSignal.logout().then(() => {
-                    console.log('OneSignal user logged out');
-                }).catch(err => {
-                    console.error('OneSignal logout error:', err);
-                });
-            }
-            
             sessionStorage.removeItem('currentUser');
             currentUser = null;
             selectedChatUser = null;
-            oneSignalInitialized = false;
             authScreen.style.display = 'block';
             chatScreen.style.display = 'none';
             document.getElementById('authForm').reset();
@@ -765,10 +760,6 @@
             // Create consistent chat ID (sorted)
             const chatId = [currentUser.id, selectedChatUser.id].sort().join('_');
             
-            console.log('Loading messages for chat:', chatId);
-            console.log('Current user:', currentUser.id);
-            console.log('Selected user:', selectedChatUser.id);
-            
             // Remove previous listener if exists
             if (currentChatListener) {
                 database.ref(currentChatListener).off();
@@ -780,13 +771,11 @@
             messagesContainer.innerHTML = '';
             
             database.ref('chats/' + chatId).on('value', (snapshot) => {
-                console.log('Messages snapshot received:', snapshot.val());
                 messagesContainer.innerHTML = '';
                 const messages = [];
                 
                 snapshot.forEach((childSnapshot) => {
                     const messageData = childSnapshot.val();
-                    console.log('Message data:', messageData);
                     messages.push({
                         id: childSnapshot.key,
                         ...messageData
@@ -795,8 +784,6 @@
                 
                 // Sort messages by timestamp
                 messages.sort((a, b) => a.timestamp - b.timestamp);
-                
-                console.log('Total messages to display:', messages.length);
                 
                 // Display all messages
                 messages.forEach(message => {
@@ -818,8 +805,6 @@
             // Determine if message is sent or received
             const isSent = message.senderId === currentUser.id;
             messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
-            
-            console.log('Displaying message:', message.text, 'Sent by me?', isSent);
             
             const time = new Date(message.timestamp).toLocaleTimeString('fr-FR', { 
                 hour: '2-digit', 
@@ -887,11 +872,27 @@
                         
                         const sender = allUsers.find(u => u.id === latestMessage.senderId);
                         if (sender) {
-                            new Notification(`Nouveau message de ${sender.username}`, {
+                            // Show browser notification
+                            const notification = new Notification(`💬 ${sender.username}`, {
                                 body: latestMessage.text,
                                 icon: '💬',
-                                tag: latestMessage.senderId
+                                badge: '💬',
+                                tag: latestMessage.senderId,
+                                requireInteraction: false
                             });
+                            
+                            // Play notification sound
+                            createNotificationSound();
+                            
+                            // Auto close after 5 seconds
+                            setTimeout(() => notification.close(), 5000);
+                            
+                            // Click to focus chat
+                            notification.onclick = () => {
+                                window.focus();
+                                selectUser(sender);
+                                notification.close();
+                            };
                         }
                     }
                 }
@@ -903,14 +904,11 @@
             const text = messageInput.value.trim();
             if (!text || !selectedChatUser) return;
             
-            console.log('Sending message to:', selectedChatUser.username);
-            
             // Disable send button to prevent double sending
             sendBtn.disabled = true;
             
             // Create consistent chat ID (sorted)
             const chatId = [currentUser.id, selectedChatUser.id].sort().join('_');
-            console.log('Chat ID:', chatId);
             
             const messageData = {
                 text: text,
@@ -922,35 +920,9 @@
                 read: false
             };
             
-            console.log('Message data:', messageData);
-            
             try {
                 // Push message to Firebase
-                const messageRef = await database.ref('chats/' + chatId).push(messageData);
-                console.log('Message sent successfully with ID:', messageRef.key);
-                
-                // Send OneSignal push notification
-                if (OneSignal && oneSignalInitialized) {
-                    try {
-                        // Send notification to receiver via OneSignal REST API
-                        const notificationData = {
-                            app_id: "4c3756ba-312a-44e0-b39f-9f11529d0933",
-                            include_aliases: {
-                                external_id: [selectedChatUser.id]
-                            },
-                            target_channel: "push",
-                            headings: { en: `Nouveau message de ${currentUser.username}` },
-                            contents: { en: text.substring(0, 100) }
-                        };
-                        
-                        console.log('Sending OneSignal notification:', notificationData);
-                        
-                        // Note: You need to implement server-side API call for production
-                        // This is just for demonstration
-                    } catch (err) {
-                        console.error('OneSignal notification error:', err);
-                    }
-                }
+                await database.ref('chats/' + chatId).push(messageData);
                 
                 // Clear input
                 messageInput.value = '';
