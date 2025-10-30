@@ -6,7 +6,6 @@
     <title>Messagerie Instantanée</title>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
-    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <style>
         * {
             margin: 0;
@@ -421,27 +420,13 @@
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
-        // OneSignal Configuration
-        let OneSignal = null;
-        window.OneSignalDeferred = window.OneSignalDeferred || [];
-        
-        OneSignalDeferred.push(async function(OneSignalInstance) {
-            OneSignal = OneSignalInstance;
-            await OneSignal.init({
-                appId: "4c3756ba-312a-44e0-b39f-9f11529d0933",
-                allowLocalhostAsSecureOrigin: true,
-            });
-            console.log('OneSignal initialized');
-        });
-
         // Global variables
         let currentUser = null;
         let selectedChatUser = null;
         let isLoginMode = true;
         let allUsers = [];
         let notificationsEnabled = false;
-        let notificationPermission = 'default';
-        let oneSignalInitialized = false;
+        let audioNotification = null;
 
         // DOM Elements
         const authScreen = document.getElementById('authScreen');
@@ -472,13 +457,26 @@
             showChatScreen();
         }
 
-        // Check notification permission on load
-        if ('Notification' in window) {
-            notificationPermission = Notification.permission;
-            if (notificationPermission === 'granted') {
-                notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
-                updateNotificationButton();
-            }
+        // Check notification settings
+        notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
+        
+        // Create notification sound
+        function createNotificationSound() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = 800;
+            oscillator.type = 'sine';
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
         }
 
         // Switch between login and signup
@@ -598,16 +596,6 @@
             currentUserDisplay.textContent = `Connecté en tant que ${currentUser.username}`;
             updateNotificationButton();
             loadUsers();
-            
-            // Login to OneSignal with user ID
-            if (OneSignal) {
-                OneSignal.login(currentUser.id).then(() => {
-                    console.log('OneSignal user logged in:', currentUser.id);
-                    oneSignalInitialized = true;
-                }).catch(err => {
-                    console.error('OneSignal login error:', err);
-                });
-            }
         }
 
         // Update notification button UI
@@ -633,50 +621,30 @@
                 notificationsEnabled = false;
                 localStorage.setItem('notificationsEnabled', 'false');
                 updateNotificationButton();
-                
-                // Unsubscribe from OneSignal
-                if (OneSignal) {
-                    try {
-                        await OneSignal.User.PushSubscription.optOut();
-                        console.log('OneSignal notifications disabled');
-                    } catch (err) {
-                        console.error('Error disabling OneSignal:', err);
-                    }
-                }
             } else {
-                // Request permission for browser notifications
-                if (Notification.permission === 'default') {
-                    const permission = await Notification.requestPermission();
-                    if (permission !== 'granted') {
-                        alert('Les notifications ont été refusées');
-                        return;
-                    }
-                } else if (Notification.permission === 'denied') {
-                    alert('Les notifications ont été bloquées. Veuillez les autoriser dans les paramètres de votre navigateur.');
-                    return;
+                // Request permission
+                let permission = Notification.permission;
+                
+                if (permission === 'default') {
+                    permission = await Notification.requestPermission();
                 }
                 
-                // Enable OneSignal push notifications
-                if (OneSignal) {
-                    try {
-                        await OneSignal.User.PushSubscription.optIn();
-                        notificationsEnabled = true;
-                        localStorage.setItem('notificationsEnabled', 'true');
-                        updateNotificationButton();
-                        
-                        console.log('OneSignal notifications enabled');
-                        
-                        // Show test notification
-                        new Notification('Notifications activées! 🔔', {
-                            body: 'Vous recevrez maintenant des notifications pour les nouveaux messages',
-                            icon: '💬'
-                        });
-                    } catch (err) {
-                        console.error('Error enabling OneSignal:', err);
-                        alert('Erreur lors de l\'activation des notifications: ' + err.message);
-                    }
+                if (permission === 'granted') {
+                    notificationsEnabled = true;
+                    localStorage.setItem('notificationsEnabled', 'true');
+                    updateNotificationButton();
+                    
+                    // Show test notification
+                    new Notification('Notifications activées! 🔔', {
+                        body: 'Vous recevrez maintenant des notifications pour les nouveaux messages',
+                        icon: '💬',
+                        badge: '💬'
+                    });
+                    
+                    // Play sound
+                    createNotificationSound();
                 } else {
-                    alert('OneSignal n\'est pas encore initialisé. Veuillez patienter...');
+                    alert('Les notifications ont été refusées. Veuillez les autoriser dans les paramètres de votre navigateur.');
                 }
             }
         });
