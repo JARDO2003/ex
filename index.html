@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Messagerie Instantanée</title>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <title>Scanner de Code QR</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -20,1045 +19,373 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            padding: 20px;
         }
 
         .container {
-            width: 100%;
-            max-width: 1200px;
             background: white;
             border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-
-        /* Auth Screen */
-        .auth-container {
-            max-width: 400px;
-            margin: 50px auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 600px;
+            width: 100%;
             padding: 40px;
+            animation: slideIn 0.5s ease-out;
         }
 
-        .auth-container h2 {
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h1 {
             color: #667eea;
-            margin-bottom: 30px;
             text-align: center;
-            font-size: 28px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-        }
-
-        .switch-auth {
-            text-align: center;
-            margin-top: 20px;
-            color: #666;
-        }
-
-        .switch-auth a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        /* Chat Screen */
-        .chat-container {
-            display: none;
-            height: 600px;
-            flex-direction: row;
-        }
-
-        .users-sidebar {
-            width: 300px;
-            border-right: 1px solid #e0e0e0;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .sidebar-header {
-            padding: 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-
-        .sidebar-header h3 {
             margin-bottom: 10px;
+            font-size: 2.5em;
         }
 
-        .current-user {
-            font-size: 14px;
-            opacity: 0.9;
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
         }
 
-        .logout-btn {
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: rgba(255,255,255,0.2);
-            border: 1px solid white;
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        .notification-btn {
-            margin-top: 10px;
-            padding: 8px 16px;
-            background: rgba(255,255,255,0.2);
-            border: 1px solid white;
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .notification-btn.active {
-            background: rgba(76, 175, 80, 0.3);
-            border-color: #4CAF50;
-        }
-
-        .notification-status {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: white;
-        }
-
-        .notification-btn.active .notification-status {
-            background: #4CAF50;
-        }
-
-        /* Hide emoji 404 errors */
-        img[src*="%F0%9F"] {
-            display: none !important;
-        }
-
-        .search-box {
-            padding: 15px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .search-box input {
+        #reader {
             width: 100%;
-            padding: 10px;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
-            font-size: 14px;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+            border: 3px solid #667eea;
         }
 
-        .users-list {
-            flex: 1;
-            overflow-y: auto;
-        }
-
-        .user-item {
-            padding: 15px 20px;
-            border-bottom: 1px solid #f0f0f0;
-            cursor: pointer;
-            transition: background 0.2s;
-            display: flex;
-            align-items: center;
-        }
-
-        .user-item:hover {
-            background: #f8f9fa;
-        }
-
-        .user-item.active {
-            background: #e8eaf6;
-        }
-
-        .user-avatar {
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            margin-right: 12px;
-        }
-
-        .user-info {
-            flex: 1;
-        }
-
-        .user-name {
-            font-weight: 600;
-            color: #333;
-            margin-bottom: 2px;
-        }
-
-        .user-status {
-            font-size: 12px;
-            color: #999;
-        }
-
-        .chat-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .chat-header {
-            padding: 20px;
-            border-bottom: 1px solid #e0e0e0;
-            background: #f8f9fa;
-        }
-
-        .chat-header h3 {
-            color: #333;
-        }
-
-        .messages-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 20px;
-            background: #f5f5f5;
-        }
-
-        .message {
-            margin-bottom: 15px;
-            display: flex;
-            align-items: flex-end;
-        }
-
-        .message.sent {
-            flex-direction: row-reverse;
-        }
-
-        .message-bubble {
-            max-width: 60%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            word-wrap: break-word;
-        }
-
-        .message.received .message-bubble {
-            background: white;
-            color: #333;
-            border-bottom-left-radius: 4px;
-        }
-
-        .message.sent .message-bubble {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .message-time {
-            font-size: 11px;
-            margin: 5px 10px;
-            opacity: 0.7;
-        }
-
-        .message-input-area {
-            padding: 20px;
-            border-top: 1px solid #e0e0e0;
+        .controls {
             display: flex;
             gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
         }
 
-        .message-input-area input {
+        button {
             flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 25px;
-            font-size: 14px;
+            padding: 15px 25px;
+            font-size: 16px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            min-width: 150px;
         }
 
-        .message-input-area input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .send-btn {
-            padding: 12px 24px;
+        #startBtn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: none;
-            border-radius: 25px;
-            cursor: pointer;
-            font-weight: 600;
         }
 
-        .no-chat-selected {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #999;
-            font-size: 18px;
+        #startBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
 
-        .error-message {
-            color: #e74c3c;
+        #stopBtn {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            display: none;
+        }
+
+        #stopBtn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .result-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            display: none;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        .result-container.show {
+            display: block;
+        }
+
+        .result-label {
+            color: #667eea;
+            font-weight: bold;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .result-text {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: monospace;
             font-size: 14px;
-            margin-top: 10px;
-            text-align: center;
+            border: 2px solid #e0e0e0;
+            color: #333;
         }
 
-        .hidden {
-            display: none !important;
+        .result-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .result-link:hover {
+            text-decoration: underline;
+        }
+
+        .copy-btn {
+            margin-top: 10px;
+            width: 100%;
+            background: #28a745;
+            color: white;
+            padding: 10px;
+        }
+
+        .copy-btn:hover {
+            background: #218838;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            display: none;
+        }
+
+        .status.show {
+            display: block;
+        }
+
+        .status.scanning {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.success {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .camera-select {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: 2px solid #667eea;
+            margin-bottom: 15px;
+            font-size: 16px;
+            display: none;
+        }
+
+        .camera-select.show {
+            display: block;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 2em;
+            }
+
+            button {
+                min-width: 100px;
+                padding: 12px 20px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Authentication Screen -->
-        <div id="authScreen" class="auth-container">
-            <h2 id="authTitle">Connexion</h2>
-            <form id="authForm">
-                <div class="form-group">
-                    <label for="username">Nom d'utilisateur</label>
-                    <input type="text" id="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="email">Email</label>
-                    <input type="email" id="email" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">Mot de passe</label>
-                    <input type="password" id="password" required>
-                </div>
-                <button type="submit" class="btn" id="authBtn">Se connecter</button>
-                <div class="error-message hidden" id="errorMessage"></div>
-            </form>
-            <div class="switch-auth">
-                <span id="switchText">Pas encore de compte ? </span>
-                <a href="#" id="switchAuth">S'inscrire</a>
-            </div>
+        <h1>📱 Scanner QR</h1>
+        <p class="subtitle">Scannez n'importe quel code QR instantanément</p>
+        
+        <div id="status" class="status"></div>
+        
+        <select id="cameraSelect" class="camera-select"></select>
+        
+        <div id="reader"></div>
+        
+        <div class="controls">
+            <button id="startBtn">▶️ Démarrer le scan</button>
+            <button id="stopBtn">⏹️ Arrêter le scan</button>
         </div>
 
-        <!-- Chat Screen -->
-        <div id="chatScreen" class="chat-container">
-            <div class="users-sidebar">
-                <div class="sidebar-header">
-                    <h3>Messagerie</h3>
-                    <div class="current-user" id="currentUser"></div>
-                    <button class="notification-btn" id="notificationBtn">
-                        <span class="notification-status"></span>
-                        <span id="notificationText">Activer notifications</span>
-                    </button>
-                    <button class="logout-btn" id="logoutBtn">Déconnexion</button>
-                </div>
-                <div class="search-box">
-                    <input type="text" id="searchUsers" placeholder="Rechercher un utilisateur...">
-                </div>
-                <div class="users-list" id="usersList"></div>
-            </div>
-
-            <div class="chat-area">
-                <div class="no-chat-selected" id="noChatSelected">
-                    Sélectionnez un utilisateur pour commencer à chatter
-                </div>
-                <div class="hidden" id="activeChatArea">
-                    <div class="chat-header">
-                        <h3 id="chatHeaderName"></h3>
-                    </div>
-                    <div class="messages-container" id="messagesContainer"></div>
-                    <div class="message-input-area">
-                        <input type="text" id="messageInput" placeholder="Tapez votre message...">
-                        <button class="send-btn" id="sendBtn">Envoyer</button>
-                    </div>
-                </div>
-            </div>
+        <div id="resultContainer" class="result-container">
+            <div class="result-label">✅ Code QR détecté :</div>
+            <div id="result" class="result-text"></div>
+            <button id="copyBtn" class="copy-btn">📋 Copier le résultat</button>
         </div>
     </div>
 
     <script>
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyCPGgtXoDUycykLaTSee0S0yY0tkeJpqKI",
-            authDomain: "data-com-a94a8.firebaseapp.com",
-            databaseURL: "https://data-com-a94a8-default-rtdb.firebaseio.com",
-            projectId: "data-com-a94a8",
-            storageBucket: "data-com-a94a8.appspot.com",
-            messagingSenderId: "276904640935",
-            appId: "1:276904640935:web:9cd805aeba6c34c767f682"
-        };
+        let html5QrcodeScanner = null;
+        let isScanning = false;
+        let cameras = [];
 
-        // Initialize Firebase
-        firebase.initializeApp(firebaseConfig);
-        const database = firebase.database();
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const resultContainer = document.getElementById('resultContainer');
+        const resultElement = document.getElementById('result');
+        const copyBtn = document.getElementById('copyBtn');
+        const statusElement = document.getElementById('status');
+        const cameraSelect = document.getElementById('cameraSelect');
 
-        // Global variables
-        let currentUser = null;
-        let selectedChatUser = null;
-        let isLoginMode = true;
-        let allUsers = [];
-        let notificationsEnabled = false;
-        let audioNotification = null;
-
-        // DOM Elements
-        const authScreen = document.getElementById('authScreen');
-        const chatScreen = document.getElementById('chatScreen');
-        const authForm = document.getElementById('authForm');
-        const authTitle = document.getElementById('authTitle');
-        const authBtn = document.getElementById('authBtn');
-        const switchAuth = document.getElementById('switchAuth');
-        const switchText = document.getElementById('switchText');
-        const errorMessage = document.getElementById('errorMessage');
-        const logoutBtn = document.getElementById('logoutBtn');
-        const usersList = document.getElementById('usersList');
-        const searchUsers = document.getElementById('searchUsers');
-        const noChatSelected = document.getElementById('noChatSelected');
-        const activeChatArea = document.getElementById('activeChatArea');
-        const chatHeaderName = document.getElementById('chatHeaderName');
-        const messagesContainer = document.getElementById('messagesContainer');
-        const messageInput = document.getElementById('messageInput');
-        const sendBtn = document.getElementById('sendBtn');
-        const currentUserDisplay = document.getElementById('currentUser');
-        const notificationBtn = document.getElementById('notificationBtn');
-        const notificationText = document.getElementById('notificationText');
-
-        // Check if user is logged in
-        const loggedInUser = localStorage.getItem('currentUser'); // Changed from sessionStorage
-        if (loggedInUser) {
-            currentUser = JSON.parse(loggedInUser);
-            showChatScreen();
+        function showStatus(message, type) {
+            statusElement.textContent = message;
+            statusElement.className = 'status show ' + type;
         }
 
-        // Check notification settings
-        notificationsEnabled = localStorage.getItem('notificationsEnabled') === 'true';
-        
-        // Create notification sound
-        function createNotificationSound() {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.frequency.value = 800;
-            oscillator.type = 'sine';
-            
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.5);
-        }
-        
-        // Request persistent notification permission on load
-        if ('Notification' in window && Notification.permission === 'default') {
-            // Auto-request permission after a short delay
-            setTimeout(() => {
-                if (currentUser) {
-                    Notification.requestPermission();
-                }
-            }, 2000);
+        function hideStatus() {
+            statusElement.className = 'status';
         }
 
-        // Switch between login and signup
-        switchAuth.addEventListener('click', (e) => {
-            e.preventDefault();
-            isLoginMode = !isLoginMode;
-            if (isLoginMode) {
-                authTitle.textContent = 'Connexion';
-                authBtn.textContent = 'Se connecter';
-                switchText.textContent = 'Pas encore de compte ? ';
-                switchAuth.textContent = 'S\'inscrire';
-            } else {
-                authTitle.textContent = 'Inscription';
-                authBtn.textContent = 'S\'inscrire';
-                switchText.textContent = 'Déjà un compte ? ';
-                switchAuth.textContent = 'Se connecter';
-            }
-            errorMessage.classList.add('hidden');
-        });
-
-        // Generate unique user ID
-        function generateUserId() {
-            return 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        }
-
-        // Hash password (simple hashing for demo)
-        function hashPassword(password) {
-            let hash = 0;
-            for (let i = 0; i < password.length; i++) {
-                const char = password.charCodeAt(i);
-                hash = ((hash << 5) - hash) + char;
-                hash = hash & hash;
-            }
-            return hash.toString();
-        }
-
-        // Auth form submission
-        authForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = document.getElementById('username').value.trim();
-            const email = document.getElementById('email').value.trim();
-            const password = document.getElementById('password').value;
-
+        async function loadCameras() {
             try {
-                if (isLoginMode) {
-                    // Login
-                    const usersSnapshot = await database.ref('users').once('value');
-                    let userFound = false;
+                const devices = await Html5Qrcode.getCameras();
+                cameras = devices;
+                
+                if (devices && devices.length > 0) {
+                    cameraSelect.innerHTML = '';
+                    devices.forEach((device, index) => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        option.text = device.label || `Caméra ${index + 1}`;
+                        cameraSelect.appendChild(option);
+                    });
                     
-                    usersSnapshot.forEach((childSnapshot) => {
-                        const userData = childSnapshot.val();
-                        if (userData.email === email && userData.password === hashPassword(password)) {
-                            userFound = true;
-                            currentUser = {
-                                id: childSnapshot.key,
-                                username: userData.username,
-                                email: userData.email
-                            };
-                        }
-                    });
-
-                    if (userFound) {
-                        localStorage.setItem('currentUser', JSON.stringify(currentUser)); // Changed from sessionStorage
-                        // Store last login time
-                        localStorage.setItem('lastLoginTime', Date.now().toString());
-                        showChatScreen();
-                        errorMessage.classList.add('hidden');
-                    } else {
-                        errorMessage.textContent = 'Email ou mot de passe incorrect';
-                        errorMessage.classList.remove('hidden');
+                    if (devices.length > 1) {
+                        cameraSelect.classList.add('show');
                     }
-                } else {
-                    // Signup - Check if email already exists
-                    const usersSnapshot = await database.ref('users').once('value');
-                    let emailExists = false;
-                    
-                    usersSnapshot.forEach((childSnapshot) => {
-                        const userData = childSnapshot.val();
-                        if (userData.email === email) {
-                            emailExists = true;
-                        }
-                    });
-
-                    if (emailExists) {
-                        errorMessage.textContent = 'Cet email est déjà utilisé';
-                        errorMessage.classList.remove('hidden');
-                        return;
-                    }
-
-                    // Create new user
-                    const userId = generateUserId();
-                    await database.ref('users/' + userId).set({
-                        username: username,
-                        email: email,
-                        password: hashPassword(password),
-                        createdAt: Date.now()
-                    });
-
-                    currentUser = {
-                        id: userId,
-                        username: username,
-                        email: email
-                    };
-
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser)); // Changed from sessionStorage
-                    // Store last login time
-                    localStorage.setItem('lastLoginTime', Date.now().toString());
-                    showChatScreen();
-                    errorMessage.classList.add('hidden');
                 }
-            } catch (error) {
-                errorMessage.textContent = 'Erreur: ' + error.message;
-                errorMessage.classList.remove('hidden');
-            }
-        });
-
-        // Show chat screen
-        function showChatScreen() {
-            authScreen.style.display = 'none';
-            chatScreen.style.display = 'flex';
-            currentUserDisplay.textContent = `Connecté en tant que ${currentUser.username}`;
-            updateNotificationButton();
-            loadUsers();
-            
-            // Update user's online status
-            updateUserStatus('online');
-            
-            // Update last seen on page visibility change
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) {
-                    updateUserStatus('away');
-                } else {
-                    updateUserStatus('online');
-                }
-            });
-            
-            // Update status before page unload
-            window.addEventListener('beforeunload', () => {
-                updateUserStatus('offline');
-            });
-        }
-        
-        // Update user online status
-        function updateUserStatus(status) {
-            if (currentUser) {
-                database.ref('users/' + currentUser.id + '/status').set({
-                    state: status,
-                    lastSeen: Date.now()
-                });
+            } catch (err) {
+                console.error('Erreur lors du chargement des caméras:', err);
             }
         }
 
-        // Update notification button UI
-        function updateNotificationButton() {
-            if (notificationsEnabled) {
-                notificationBtn.classList.add('active');
-                notificationText.textContent = 'Notifications activées';
+        function onScanSuccess(decodedText, decodedResult) {
+            resultContainer.classList.add('show');
+            
+            const isUrl = decodedText.startsWith('http://') || decodedText.startsWith('https://');
+            
+            if (isUrl) {
+                resultElement.innerHTML = `<a href="${decodedText}" target="_blank" class="result-link">${decodedText}</a>`;
             } else {
-                notificationBtn.classList.remove('active');
-                notificationText.textContent = 'Activer notifications';
+                resultElement.textContent = decodedText;
+            }
+            
+            showStatus('Code QR scanné avec succès !', 'success');
+            
+            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYHGGS57OebNQUIV67p6KldFA5NpOPutGIdBjiP1fHNeCsFI3bE79yRPwoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYHGGS57OebNQUIV67p6KldFA5NpOPutGIdBjiP1fHNeCsFI3bE79yRPwoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYHGGS57OebNQUIV67p6KldFA5NpOPutGIdBjiP1fHNeCsFI3bE79yRPwoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYHGGS57OebNQUIV67p6KldFA5NpOPutGIdBjiP1fHNeCsFI3bE79yRPwo=');
+            audio.play().catch(() => {});
+        }
+
+        function onScanFailure(error) {
+            // Silencieux pour éviter trop de logs
+        }
+
+        async function startScanning() {
+            if (isScanning) return;
+            
+            try {
+                const cameraId = cameraSelect.value || cameras[0]?.id || { facingMode: "environment" };
+                
+                html5QrcodeScanner = new Html5Qrcode("reader");
+                
+                await html5QrcodeScanner.start(
+                    cameraId,
+                    {
+                        fps: 10,
+                        qrbox: { width: 250, height: 250 }
+                    },
+                    onScanSuccess,
+                    onScanFailure
+                );
+                
+                isScanning = true;
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'block';
+                showStatus('📷 Scan en cours... Placez le QR code devant la caméra', 'scanning');
+                
+            } catch (err) {
+                console.error('Erreur démarrage scan:', err);
+                showStatus('❌ Erreur: Impossible d\'accéder à la caméra', 'stopped');
             }
         }
 
-        // Handle notification button click
-        notificationBtn.addEventListener('click', async () => {
-            if (!('Notification' in window)) {
-                alert('Votre navigateur ne supporte pas les notifications');
-                return;
-            }
-
-            if (notificationsEnabled) {
-                // Disable notifications
-                notificationsEnabled = false;
-                localStorage.setItem('notificationsEnabled', 'false');
-                updateNotificationButton();
-            } else {
-                // Request permission
-                let permission = Notification.permission;
-                
-                if (permission === 'default') {
-                    permission = await Notification.requestPermission();
-                }
-                
-                if (permission === 'granted') {
-                    notificationsEnabled = true;
-                    localStorage.setItem('notificationsEnabled', 'true');
-                    updateNotificationButton();
-                    
-                    // Show test notification
-                    new Notification('Notifications activées! 🔔', {
-                        body: 'Vous recevrez maintenant des notifications pour les nouveaux messages',
-                        icon: '💬',
-                        badge: '💬'
-                    });
-                    
-                    // Play sound
-                    createNotificationSound();
-                } else {
-                    alert('Les notifications ont été refusées. Veuillez les autoriser dans les paramètres de votre navigateur.');
-                }
-            }
-        });
-
-        // Logout
-        logoutBtn.addEventListener('click', () => {
-            // Clean up listeners
-            if (currentChatListener) {
-                database.ref(currentChatListener).off();
-            }
-            database.ref('chats').off();
-            database.ref('users').off();
+        async function stopScanning() {
+            if (!isScanning || !html5QrcodeScanner) return;
             
-            // Update status to offline
-            if (currentUser) {
-                database.ref('users/' + currentUser.id + '/status').set({
-                    state: 'offline',
-                    lastSeen: Date.now()
-                });
-            }
-            
-            localStorage.removeItem('currentUser'); // Changed from sessionStorage
-            localStorage.removeItem('lastLoginTime');
-            currentUser = null;
-            selectedChatUser = null;
-            authScreen.style.display = 'block';
-            chatScreen.style.display = 'none';
-            document.getElementById('authForm').reset();
-            messagesContainer.innerHTML = '';
-            noChatSelected.classList.remove('hidden');
-            activeChatArea.classList.add('hidden');
-        });
-
-        // Load all users
-        function loadUsers() {
-            database.ref('users').on('value', (snapshot) => {
-                allUsers = [];
-                snapshot.forEach((childSnapshot) => {
-                    const userId = childSnapshot.key;
-                    const userData = childSnapshot.val();
-                    if (userId !== currentUser.id) {
-                        allUsers.push({
-                            id: userId,
-                            username: userData.username,
-                            email: userData.email
-                        });
-                    }
-                });
-                displayUsers(allUsers);
+            try {
+                await html5QrcodeScanner.stop();
+                html5QrcodeScanner.clear();
+                isScanning = false;
+                startBtn.style.display = 'block';
+                stopBtn.style.display = 'none';
+                showStatus('⏹️ Scan arrêté', 'stopped');
                 
-                // Start listening for notifications
-                listenForNotifications();
-            });
+                setTimeout(hideStatus, 3000);
+            } catch (err) {
+                console.error('Erreur arrêt scan:', err);
+            }
         }
 
-        // Display users
-        function displayUsers(users) {
-            usersList.innerHTML = '';
-            users.forEach(user => {
-                if (!user || !user.username || !user.email) return;
-                
-                const userItem = document.createElement('div');
-                userItem.className = 'user-item';
-                if (selectedChatUser && selectedChatUser.id === user.id) {
-                    userItem.classList.add('active');
-                }
-                
-                // Check for unread messages
-                const chatId = [currentUser.id, user.id].sort().join('_');
-                checkUnreadMessages(chatId, user.id, (hasUnread) => {
-                    const unreadBadge = hasUnread ? '<span style="background:#ff5252;color:white;padding:2px 6px;border-radius:10px;font-size:10px;margin-left:auto;">New</span>' : '';
-                    
-                    userItem.innerHTML = `
-                        <div class="user-avatar">${user.username.charAt(0).toUpperCase()}</div>
-                        <div class="user-info">
-                            <div class="user-name">${user.username}</div>
-                            <div class="user-status">${user.email}</div>
-                        </div>
-                        ${unreadBadge}
-                    `;
-                });
-                
-                userItem.addEventListener('click', () => selectUser(user));
-                usersList.appendChild(userItem);
-            });
-        }
-        
-        // Check for unread messages
-        function checkUnreadMessages(chatId, userId, callback) {
-            database.ref('chats/' + chatId).once('value', (snapshot) => {
-                let hasUnread = false;
-                snapshot.forEach((childSnapshot) => {
-                    const msg = childSnapshot.val();
-                    if (msg.receiverId === currentUser.id && msg.senderId === userId && !msg.read) {
-                        hasUnread = true;
-                    }
-                });
-                callback(hasUnread);
-            });
-        }
-
-        // Search users
-        searchUsers.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.toLowerCase();
-            const filteredUsers = allUsers.filter(user => {
-                if (!user || !user.username || !user.email) return false;
-                return user.username.toLowerCase().includes(searchTerm) ||
-                       user.email.toLowerCase().includes(searchTerm);
-            });
-            displayUsers(filteredUsers);
-        });
-
-        // Select user to chat with
-        function selectUser(user) {
-            selectedChatUser = user;
-            noChatSelected.classList.add('hidden');
-            activeChatArea.classList.remove('hidden');
-            chatHeaderName.textContent = user.username;
-            
-            document.querySelectorAll('.user-item').forEach(item => {
-                item.classList.remove('active');
-            });
-            
-            const items = document.querySelectorAll('.user-item');
-            items.forEach(item => {
-                if (item.querySelector('.user-name').textContent === user.username) {
-                    item.classList.add('active');
-                }
-            });
-            
-            // Mark messages as read
-            const chatId = [currentUser.id, user.id].sort().join('_');
-            markMessagesAsRead(chatId);
-            
-            loadMessages();
-        }
-        
-        // Mark all messages in a chat as read
-        function markMessagesAsRead(chatId) {
-            database.ref('chats/' + chatId).once('value', (snapshot) => {
-                snapshot.forEach((childSnapshot) => {
-                    const msg = childSnapshot.val();
-                    if (msg.receiverId === currentUser.id && !msg.read) {
-                        database.ref('chats/' + chatId + '/' + childSnapshot.key).update({
-                            read: true
-                        });
-                    }
-                });
-            });
-        }
-
-        // Load messages
-        let currentChatListener = null;
-        
-        function loadMessages() {
-            if (!selectedChatUser) return;
-            
-            // Create consistent chat ID (sorted)
-            const chatId = [currentUser.id, selectedChatUser.id].sort().join('_');
-            
-            // Remove previous listener if exists
-            if (currentChatListener) {
-                database.ref(currentChatListener).off();
-            }
-            
-            currentChatListener = 'chats/' + chatId;
-            
-            // Clear messages first
-            messagesContainer.innerHTML = '';
-            
-            database.ref('chats/' + chatId).on('value', (snapshot) => {
-                messagesContainer.innerHTML = '';
-                const messages = [];
-                
-                snapshot.forEach((childSnapshot) => {
-                    const messageData = childSnapshot.val();
-                    messages.push({
-                        id: childSnapshot.key,
-                        ...messageData
-                    });
-                });
-                
-                // Sort messages by timestamp
-                messages.sort((a, b) => a.timestamp - b.timestamp);
-                
-                // Display all messages
-                messages.forEach(message => {
-                    displayMessage(message);
-                });
-                
-                // Scroll to bottom
+        function copyToClipboard() {
+            const text = resultElement.textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '✅ Copié !';
                 setTimeout(() => {
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                }, 100);
-            }, (error) => {
-                console.error('Error loading messages:', error);
+                    copyBtn.textContent = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Erreur copie:', err);
+                alert('Erreur lors de la copie');
             });
-        }
-        
-        function displayMessage(message) {
-            const messageDiv = document.createElement('div');
-            
-            // Determine if message is sent or received
-            const isSent = message.senderId === currentUser.id;
-            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
-            
-            const time = new Date(message.timestamp).toLocaleTimeString('fr-FR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            });
-            
-            // Escape HTML to prevent XSS
-            const escapedText = message.text
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-            
-            messageDiv.innerHTML = `
-                <div class="message-bubble">${escapedText}</div>
-                <div class="message-time">${time}</div>
-            `;
-            messagesContainer.appendChild(messageDiv);
         }
 
-        // Listen for new messages for notifications
-        let lastMessageTimestamps = {};
-        let notificationQueue = []; // Queue for notifications when tab is not active
-        
-        function listenForNotifications() {
-            if (!currentUser) return;
-            
-            // Listen to all chats that involve current user
-            database.ref('chats').on('child_added', (snapshot) => {
-                checkChatForNotifications(snapshot);
-            });
-            
-            database.ref('chats').on('child_changed', (snapshot) => {
-                checkChatForNotifications(snapshot);
-            });
-        }
-        
-        function checkChatForNotifications(snapshot) {
-            const chatId = snapshot.key;
-            
-            // Check if this chat involves the current user
-            if (chatId.includes(currentUser.id)) {
-                let latestMessage = null;
-                let latestTimestamp = 0;
-                
-                snapshot.forEach((messageSnapshot) => {
-                    const message = messageSnapshot.val();
-                    if (message.timestamp > latestTimestamp) {
-                        latestTimestamp = message.timestamp;
-                        latestMessage = message;
-                    }
-                });
-                
-                // Check if this is a new message
-                if (latestMessage && 
-                    latestMessage.receiverId === currentUser.id && 
-                    latestMessage.senderId !== currentUser.id &&
-                    (!lastMessageTimestamps[chatId] || latestTimestamp > lastMessageTimestamps[chatId])) {
-                    
-                    lastMessageTimestamps[chatId] = latestTimestamp;
-                    
-                    const sender = allUsers.find(u => u.id === latestMessage.senderId);
-                    if (sender) {
-                        // Always show notification if not in active chat with sender
-                        if (!selectedChatUser || selectedChatUser.id !== latestMessage.senderId) {
-                            showNotification(sender, latestMessage);
-                        }
-                        
-                        // Refresh user list to show unread badge
-                        displayUsers(allUsers);
-                    }
-                }
-            }
-        }
-        
-        function showNotification(sender, message) {
-            // Check if notifications are enabled
-            if (!notificationsEnabled) return;
-            
-            // Request permission if not granted
-            if (Notification.permission === 'granted') {
-                const notification = new Notification(`💬 ${sender.username}`, {
-                    body: message.text.substring(0, 100),
-                    icon: '💬',
-                    badge: '💬',
-                    tag: message.senderId,
-                    requireInteraction: false,
-                    silent: false
-                });
-                
-                // Play notification sound
-                try {
-                    createNotificationSound();
-                } catch (e) {
-                    console.log('Sound play failed:', e);
-                }
-                
-                // Auto close after 5 seconds
-                setTimeout(() => notification.close(), 5000);
-                
-                // Click to focus chat
-                notification.onclick = () => {
-                    window.focus();
-                    selectUser(sender);
-                    notification.close();
-                };
-            } else if (Notification.permission === 'default') {
-                // Request permission
-                Notification.requestPermission().then(permission => {
-                    if (permission === 'granted') {
-                        showNotification(sender, message);
-                    }
-                });
-            }
-        }
+        startBtn.addEventListener('click', startScanning);
+        stopBtn.addEventListener('click', stopScanning);
+        copyBtn.addEventListener('click', copyToClipboard);
 
-        // Send message
-        async function sendMessage() {
-            const text = messageInput.value.trim();
-            if (!text || !selectedChatUser) return;
-            
-            // Disable send button to prevent double sending
-            sendBtn.disabled = true;
-            
-            // Create consistent chat ID (sorted)
-            const chatId = [currentUser.id, selectedChatUser.id].sort().join('_');
-            
-            const messageData = {
-                text: text,
-                senderId: currentUser.id,
-                senderName: currentUser.username,
-                receiverId: selectedChatUser.id,
-                receiverName: selectedChatUser.username,
-                timestamp: Date.now(),
-                read: false
-            };
-            
-            try {
-                // Push message to Firebase
-                await database.ref('chats/' + chatId).push(messageData);
-                
-                // Clear input
-                messageInput.value = '';
-                
-                // Re-enable send button
-                sendBtn.disabled = false;
-                
-                // Focus back on input
-                messageInput.focus();
-            } catch (error) {
-                console.error('Erreur lors de l\'envoi du message:', error);
-                alert('Erreur lors de l\'envoi du message: ' + error.message);
-                sendBtn.disabled = false;
-            }
-        }
-
-        sendBtn.addEventListener('click', sendMessage);
-        messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
-        });
+        // Charger les caméras au démarrage
+        loadCameras();
     </script>
 </body>
 </html>
